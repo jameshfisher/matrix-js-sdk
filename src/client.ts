@@ -8003,49 +8003,23 @@ export class MatrixClient extends TypedEventEmitter<EmittedEvents, ClientEventHa
 
     /**
      * Make a request for an `m.login.token` to be issued as per
-     * [MSC3882](https://github.com/matrix-org/matrix-spec-proposals/pull/3882).
-     * The server may require User-Interactive auth.
+     * https://spec.matrix.org/v1.7/client-server-api/#post_matrixclientv1loginget_token
      *
-     * Compatibility with unstable implementations of MSC3882 is deprecated and will be removed in a future release.
+     * The server may require User-Interactive auth.
      *
      * @param auth - Optional. Auth data to supply for User-Interactive auth.
      * @returns Promise which resolves: On success, the token response
      * or UIA auth data.
      */
     public async requestLoginToken(auth?: AuthDict): Promise<UIAResponse<LoginTokenPostResponse>> {
-        // use capabilities to determine which revision of the MSC is being used
-        const capabilities = await this.getCapabilities();
-
-        const usesStable = !!capabilities["m.get_login_token"];
-        const usesUnstableRevision1 = !usesStable && !!capabilities["org.matrix.msc3882.get_login_token"];
-        // use stable endpoint if capability is exposed otherwise use old unstable r0 endpoint
-        const endpoint =
-            usesStable || usesUnstableRevision1
-                ? "/login/get_token" // endpoint for stable + unstable r1
-                : "/login/token"; // unstable r0 endpoint
-
-        // determine whether to use stable or unstable prefix
-        const prefix = usesStable ? ClientPrefix.V1 : `${ClientPrefix.Unstable}/org.matrix.msc3882`;
-
         const body: UIARequest<{}> = { auth };
-        const res = await this.http.authedRequest<UIAResponse<LoginTokenPostResponse>>(
+        return this.http.authedRequest<UIAResponse<LoginTokenPostResponse>>(
             Method.Post,
-            endpoint,
+            "/login/get_token",
             undefined, // no query params
             body,
-            { prefix },
+            { prefix: ClientPrefix.V1 },
         );
-
-        // the representation of expires_in changed from unstable revision 0 to unstable revision 1 so we cross populate
-        if ("login_token" in res) {
-            if (typeof res.expires_in_ms === "number") {
-                res.expires_in = Math.floor(res.expires_in_ms / 1000);
-            } else if (typeof res.expires_in === "number") {
-                res.expires_in_ms = res.expires_in * 1000;
-            }
-        }
-
-        return res;
     }
 
     /**
