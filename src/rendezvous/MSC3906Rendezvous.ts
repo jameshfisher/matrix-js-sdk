@@ -24,6 +24,7 @@ import { buildFeatureSupportMap, Feature, ServerSupport } from "../feature";
 import { logger } from "../logger";
 import { sleep } from "../utils";
 import { CrossSigningKey } from "../crypto-api";
+import { Device } from "../matrix";
 
 enum PayloadType {
     Start = "m.login.start",
@@ -180,7 +181,7 @@ export class MSC3906Rendezvous {
     }
 
     private async verifyAndCrossSignDevice(
-        deviceInfo: DeviceInfo,
+        deviceInfo: Device,
     ): Promise<CrossSigningInfo | DeviceInfo | ICrossSigningKey | undefined> {
         const crypto = this.client.getCrypto();
         if (!crypto) {
@@ -215,7 +216,8 @@ export class MSC3906Rendezvous {
             type: PayloadType.Finish,
             outcome: Outcome.Verified,
             verifying_device_id: this.client.getDeviceId()!,
-            verifying_device_key: this.client.getDeviceEd25519Key()!,
+            // FIXME: this needs fixing too
+            verifying_device_key: this.client.crypto!.getDeviceEd25519Key()!,
             master_key: masterPublicKey,
         });
 
@@ -239,7 +241,8 @@ export class MSC3906Rendezvous {
             return undefined;
         }
 
-        if (!this.client.crypto) {
+        const crypto = this.client.getCrypto();
+        if (!crypto) {
             throw new Error("Crypto not available on client");
         }
 
@@ -249,12 +252,16 @@ export class MSC3906Rendezvous {
             throw new Error("No user ID set");
         }
 
-        let deviceInfo = this.client.crypto.getStoredDevice(userId, this.newDeviceId);
+        // TODO: is this correct?
+        let deviceInfo: Device | undefined = (await crypto.getUserDeviceInfo([userId], true))
+            .get(userId)
+            ?.get(this.newDeviceId);
 
         if (!deviceInfo) {
             logger.info("Going to wait for new device to be online");
             await sleep(timeout);
-            deviceInfo = this.client.crypto.getStoredDevice(userId, this.newDeviceId);
+            // TODO: is this correct?
+            deviceInfo = (await crypto.getUserDeviceInfo([userId], true)).get(userId)?.get(this.newDeviceId);
         }
 
         if (deviceInfo) {
