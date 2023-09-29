@@ -23,6 +23,7 @@ import { DeviceInfo } from "../crypto/deviceinfo";
 import { buildFeatureSupportMap, Feature, ServerSupport } from "../feature";
 import { logger } from "../logger";
 import { sleep } from "../utils";
+import { CrossSigningKey } from "../crypto-api";
 
 enum PayloadType {
     Start = "m.login.start",
@@ -181,7 +182,8 @@ export class MSC3906Rendezvous {
     private async verifyAndCrossSignDevice(
         deviceInfo: DeviceInfo,
     ): Promise<CrossSigningInfo | DeviceInfo | ICrossSigningKey | undefined> {
-        if (!this.client.crypto) {
+        const crypto = this.client.getCrypto();
+        if (!crypto) {
             throw new Error("Crypto not available on client");
         }
 
@@ -203,9 +205,11 @@ export class MSC3906Rendezvous {
         }
         // mark the device as verified locally + cross sign
         logger.info(`Marking device ${this.newDeviceId} as verified`);
-        const info = await this.client.crypto.setDeviceVerification(userId, this.newDeviceId, true, false, true);
 
-        const masterPublicKey = this.client.crypto.crossSigningInfo.getId("master")!;
+        // FIXME: this function needs to be plumbed in
+        const info = await this.client.crypto!.setDeviceVerification(userId, this.newDeviceId, true, false, true);
+
+        const masterPublicKey = (await crypto.getCrossSigningKeyId(CrossSigningKey.Master)) ?? undefined;
 
         await this.send({
             type: PayloadType.Finish,
